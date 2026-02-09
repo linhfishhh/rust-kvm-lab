@@ -1,0 +1,25 @@
+use crate::kvm_bindings::*;
+
+pub fn exit_reason_name(reason: u32) -> &'static str {
+    match reason {
+        KVM_EXIT_UNKNOWN => "KVM_EXIT_UNKNOWN",
+        KVM_EXIT_EXCEPTION => "KVM_EXIT_EXCEPTION",
+        KVM_EXIT_IO => "KVM_EXIT_IO",
+        KVM_EXIT_HYPERCALL => "KVM_EXIT_HYPERCALL",
+        KVM_EXIT_DEBUG => "KVM_EXIT_DEBUG",
+        KVM_EXIT_HLT => "KVM_EXIT_HLT",
+        KVM_EXIT_MMIO => "KVM_EXIT_MMIO",
+        KVM_EXIT_IRQ_WINDOW_OPEN => "KVM_EXIT_IRQ_WINDOW_OPEN",
+        KVM_EXIT_SHUTDOWN => "KVM_EXIT_SHUTDOWN",
+        KVM_EXIT_FAIL_ENTRY => "KVM_EXIT_FAIL_ENTRY",
+        KVM_EXIT_INTR => "KVM_EXIT_INTR",
+        KVM_EXIT_SET_TPR => "KVM_EXIT_SET_TPR",
+        KVM_EXIT_TPR_ACCESS => "KVM_EXIT_TPR_ACCESS",
+        KVM_EXIT_S390_SIEIC => "KVM_EXIT_S390_SIEIC",
+        KVM_EXIT_S390_RESET => "KVM_EXIT_S390_RESET",
+        KVM_EXIT_DCR => "KVM_EXIT_DCR",
+        KVM_EXIT_NMI => "KVM_EXIT_NMI",
+        KVM_EXIT_INTERNAL_ERROR => "KVM_EXIT_INTERNAL_ERROR",
+        _ => "UNKNOWN_EXIT_REASON",
+    }
+}

@@ -1,0 +1,51 @@
+[tasks.build]
+description = "Build the project"
+command = "cargo"
+args = ["build"]
+
+[tasks.build-release]
+description = "Build the project in release mode"
+command = "cargo"
+args = ["build", "--release"]
+
+[tasks.run]
+description = "Run the KVM demo (requires sudo)"
+script = "sudo ./target/debug/kvm-demo"
+dependencies = ["build"]
+
+[tasks.run-release]
+description = "Run the KVM demo in release mode (requires sudo)"
+script = "sudo ./target/release/kvm-demo"
+dependencies = ["build-release"]
+
+[tasks.clean]
+description = "Clean build artifacts"
+command = "cargo"
+args = ["clean"]
+
+[tasks.check]
+description = "Check the project for errors"
+command = "cargo"
+args = ["check"]
+
+[tasks.fmt]
+description = "Format the code"
+command = "cargo"
+args = ["fmt"]
+
+[tasks.clippy]
+description = "Run clippy lints"
+command = "cargo"
+args = ["clippy", "--", "-D", "warnings"]
+
+[tasks.test]
+description = "Run tests"
+command = "cargo"
+args = ["test"]
+
+[tasks.dev]
+description = "Development workflow: format, check, and build"
+dependencies = ["fmt", "check", "build"]
+
+[tasks.default]
+alias = "build"

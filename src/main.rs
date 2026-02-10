@@ -5,27 +5,26 @@ mod utils;
 use kvm::{GuestMemory, Kvm, VcpuRun};
 use kvm_bindings::*;
 use utils::exit_reason_name;
+use tracing::{info, debug, warn, error};
 
 fn main() -> Result<(), String> {
-    println!("=== Creating a minimal KVM virtual machine ===");
+    tracing_subscriber::fmt::init();
+    
+    info!("=== Creating a minimal KVM virtual machine ===");
 
     // Step 1: Open KVM
     let kvm = Kvm::new()?;
-    println!("✓ Opened /dev/kvm (fd: {})", kvm.fd());
-    println!("✓ KVM API version: {}", KVM_API_VERSION);
+    info!(fd = kvm.fd(), "✓ Opened /dev/kvm");
+    info!(version = KVM_API_VERSION, "✓ KVM API version");
 
     // Step 2: Create VM
     let vm = kvm.create_vm()?;
-    println!("✓ Created VM (fd: {})", vm.fd());
+    info!(fd = vm.fd(), "✓ Created VM");
 
     // Step 3: Allocate guest memory
     let mem_size = 0x1000; // 4KB
     let mut guest_memory = GuestMemory::new(mem_size)?;
-    println!(
-        "✓ Allocated guest memory: {:p} (size: {} bytes)",
-        guest_memory.as_ptr(),
-        mem_size
-    );
+    info!(addr = ?guest_memory.as_ptr(), size = mem_size, "✓ Allocated guest memory");
 
     // Step 4: Put machine code in memory
     let code = guest_memory.as_slice_mut();
@@ -40,7 +39,7 @@ fn main() -> Result<(), String> {
     code[8] = 0xee; // out %al, (%dx)
     code[9] = 0xf4; // hlt
 
-    println!("✓ Loaded guest code: HLT instruction at guest address 0x1000");
+    debug!("✓ Loaded guest code: HLT instruction at guest address 0x1000");
 
     // Step 5: Set up memory region
     let mem_region = KvmUserspaceMemoryRegion {
@@ -52,23 +51,20 @@ fn main() -> Result<(), String> {
     };
 
     vm.set_user_memory_region(&mem_region)?;
-    println!(
-        "✓ Mapped guest physical 0x1000 -> host virtual {:p}",
-        guest_memory.as_ptr()
-    );
+    info!(guest_phys = "0x1000", host_virt = ?guest_memory.as_ptr(), "✓ Mapped memory");
 
     // Step 6: Create VCPU
     let vcpu = vm.create_vcpu(0)?;
-    println!("✓ Created VCPU (fd: {})", vcpu.fd());
+    info!(fd = vcpu.fd(), "✓ Created VCPU");
 
     // Step 7: Get VCPU mmap size
     let vcpu_mmap_size = kvm.get_vcpu_mmap_size()?;
-    println!("✓ VCPU mmap size: {} bytes", vcpu_mmap_size);
+    debug!(size = vcpu_mmap_size, "✓ VCPU mmap size");
 
     // Step 8: Map VCPU
     let run_ptr = vcpu.map_run(vcpu_mmap_size)?;
     let run = VcpuRun::new(run_ptr, vcpu_mmap_size);
-    println!("✓ Mapped VCPU communication area");
+    debug!("✓ Mapped VCPU communication area");
 
     // Step 9: Initialize CPU state
     let mut sregs = vcpu.get_sregs()?;
@@ -89,13 +85,10 @@ fn main() -> Result<(), String> {
     regs.rbp = 0;
     regs.rflags = 0x2;
     vcpu.set_regs(&regs)?;
-    println!(
-        "✓ Set CPU registers (RIP=0x{:x}, RSP=0x{:x})",
-        regs.rip, regs.rsp
-    );
+    info!(rip = format!("0x{:x}", regs.rip), rsp = format!("0x{:x}", regs.rsp), "✓ Set CPU registers");
 
     // Step 10: Run the VM
-    println!("\n=== Running virtual machine ===");
+    info!("\n=== Running virtual machine ===");
 
     let mut exit_count = 0;
     loop {
@@ -103,61 +96,43 @@ fn main() -> Result<(), String> {
 
         exit_count += 1;
         let kvm_run = run.as_ref();
-        println!(
-            "VM Exit #{}: {} (reason={})",
-            exit_count,
-            exit_reason_name(kvm_run.exit_reason),
-            kvm_run.exit_reason
-        );
+        debug!(count = exit_count, reason = kvm_run.exit_reason, name = exit_reason_name(kvm_run.exit_reason), "VM Exit");
 
         match kvm_run.exit_reason {
             KVM_EXIT_HLT => {
-                println!("✓ VM halted normally");
+                info!("✓ VM halted normally");
                 break;
             }
             KVM_EXIT_IO => {
                 let io = unsafe { &kvm_run.exit_data.io };
-                println!(
-                    "I/O operation: port=0x{:x}, direction={}, size={}, count={}",
-                    io.port,
-                    if io.direction == KVM_EXIT_IO_OUT {
-                        "OUT"
-                    } else {
-                        "IN"
-                    },
-                    io.size,
-                    io.count
-                );
+                info!(port = format!("0x{:x}", io.port), direction = if io.direction == KVM_EXIT_IO_OUT { "OUT" } else { "IN" }, size = io.size, count = io.count, "I/O operation");
             }
             KVM_EXIT_SHUTDOWN => {
-                println!("VM requested shutdown");
+                warn!("VM requested shutdown");
                 break;
             }
             KVM_EXIT_INTERNAL_ERROR => {
                 let internal = unsafe { &kvm_run.exit_data.internal };
-                println!("Internal KVM error: suberror={}", internal.suberror);
+                error!(suberror = internal.suberror, "Internal KVM error");
                 break;
             }
             KVM_EXIT_FAIL_ENTRY => {
                 let fail_entry = unsafe { &kvm_run.exit_data.fail_entry };
-                println!(
-                    "VM entry failed: hardware_entry_failure_reason=0x{:x}",
-                    fail_entry.hardware_entry_failure_reason
-                );
+                error!(reason = format!("0x{:x}", fail_entry.hardware_entry_failure_reason), "VM entry failed");
                 break;
             }
             _ => {
-                println!("Unhandled exit reason: {}", kvm_run.exit_reason);
+                warn!(reason = kvm_run.exit_reason, "Unhandled exit reason");
                 if exit_count > 10 {
-                    println!("Too many exits, stopping");
+                    warn!("Too many exits, stopping");
                     break;
                 }
             }
         }
     }
 
-    println!("\n=== Cleanup ===");
-    println!("✓ VM execution complete!");
+    info!("\n=== Cleanup ===");
+    info!("✓ VM execution complete!");
 
     Ok(())
 }
